@@ -79,7 +79,7 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 10000;
-const HOST = process.env.HOST || 'localhost';
+const HOST = '0.0.0.0'; // Sửa từ 'localhost' thành '0.0.0.0'
 app.listen(PORT, HOST, () => {
   console.log(`Server đang chạy tại http://${HOST}:${PORT}`);
   console.log(`Môi trường: ${process.env.NODE_ENV || 'development'}`);
