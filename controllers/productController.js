@@ -17,7 +17,7 @@ const handleMulterError = (err, req, res, next) => {
 // Lấy tất cả sản phẩm
 exports.getAllProducts = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 10; // Mặc định 10 nếu không có
+    const limit = parseInt(req.query.limit) || 10;
     if (limit < 0) {
       return res.status(400).json({ error: 'Giá trị limit không hợp lệ, phải là số nguyên không âm' });
     }
@@ -39,13 +39,19 @@ exports.getProductById = async (req, res) => {
       return res.status(400).json({ message: 'ID sản phẩm không hợp lệ' });
     }
 
-    const isAdmin = !!req.headers.authorization;
+    const isAdmin = !!req.headers.authorization; // Kiểm tra token admin
+
     let product;
     if (isAdmin) {
+      // Nếu là admin, chỉ lấy sản phẩm mà không tăng views
       product = await Product.findById(id);
     } else {
-      product = await Product.findById(id);
-      // Có thể thêm logic tăng views nếu cần
+      // Nếu không phải admin, tăng views và lấy sản phẩm
+      product = await Product.findByIdAndUpdate(
+        id,
+        { $inc: { views: 1 } }, // Tăng views lên 1
+        { new: true, runValidators: true }
+      );
     }
 
     if (!product) {
@@ -61,7 +67,7 @@ exports.getProductById = async (req, res) => {
 // Lấy sản phẩm nổi bật (dựa trên views)
 exports.getFeaturedProducts = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 10; // Mặc định 10 nếu không có
+    const limit = parseInt(req.query.limit) || 10;
     if (limit < 0) {
       return res.status(400).json({ error: 'Giá trị limit không hợp lệ, phải là số nguyên không âm' });
     }
@@ -87,12 +93,12 @@ exports.getFeaturedProducts = async (req, res) => {
 // Lấy sản phẩm đang sale (dựa trên status 'sale')
 exports.getSaleProducts = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 10; // Mặc định 10 nếu không có
+    const limit = parseInt(req.query.limit) || 10;
     if (limit < 0) {
       return res.status(400).json({ error: 'Giá trị limit không hợp lệ, phải là số nguyên không âm' });
     }
 
-    const saleProducts = await Product.find({ status: { $in: ['sale', 'Sale'] } })
+    const saleProducts = await Product.find({ tag: 'sale' })
       .sort({ createdAt: -1 })
       .limit(limit);
 
@@ -126,6 +132,7 @@ exports.createProduct = async (req, res) => {
       slug,
       price,
       status,
+      tag,
       short_description,
       weight,
       size,
@@ -148,12 +155,36 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ error: 'Cần ít nhất một hình ảnh sản phẩm' });
     }
 
-    // Xử lý các trường khác
+    // Xử lý category
+    let parsedCategory = {};
+    if (category) {
+      try {
+        parsedCategory = typeof category === 'string' ? JSON.parse(category) : category;
+        if (!parsedCategory.id || !parsedCategory.name_categories) {
+          return res.status(400).json({ error: 'Category phải có id và name_categories' });
+        }
+      } catch (e) {
+        return res.status(400).json({ error: `Lỗi phân tích category: ${e.message}` });
+      }
+    }
+
+    // Xử lý size
+    let parsedSize = [];
+    if (size) {
+      try {
+        parsedSize = typeof size === 'string' ? JSON.parse(size) : size;
+        if (!Array.isArray(parsedSize) || !parsedSize.every(item => item.stock && item.size_name)) {
+          return res.status(400).json({ error: 'Size phải là mảng các object với stock và size_name' });
+        }
+      } catch (e) {
+        return res.status(400).json({ error: `Lỗi phân tích size: ${e.message}` });
+      }
+    }
+
+    // Xử lý các trường mảng khác
     let parsedSpiritualBenefits = [];
     let parsedHealthBenefits = [];
     let parsedCareInstructions = [];
-    let parsedSize = [];
-
     if (spiritual_benefits) {
       parsedSpiritualBenefits = typeof spiritual_benefits === 'string' ? JSON.parse(spiritual_benefits) : spiritual_benefits;
     }
@@ -163,15 +194,9 @@ exports.createProduct = async (req, res) => {
     if (care_instructions) {
       parsedCareInstructions = typeof care_instructions === 'string' ? JSON.parse(care_instructions) : care_instructions;
     }
-    if (size) {
-      parsedSize = typeof size === 'string' ? JSON.parse(size) : size;
-      if (!Array.isArray(parsedSize) || parsedSize.length !== 2 || !parsedSize.every(num => Number.isInteger(num))) {
-        return res.status(400).json({ error: 'Kích thước phải là mảng [min, max] với số nguyên' });
-      }
-    }
 
     const newProduct = new Product({
-      category: category || '',
+      category: parsedCategory,
       level: level || '',
       stock: parseInt(stock, 10) || 0,
       Collection: Collection || '',
@@ -181,6 +206,7 @@ exports.createProduct = async (req, res) => {
       images,
       price: parseInt(price, 10) || 0,
       status: status || 'show',
+      tag: tag || '',
       short_description: short_description || '',
       weight: weight || '',
       size: parsedSize,
@@ -222,6 +248,7 @@ exports.updateProduct = async (req, res) => {
     slug,
     price,
     status,
+    tag,
     short_description,
     weight,
     size,
@@ -236,22 +263,18 @@ exports.updateProduct = async (req, res) => {
   } = req.body;
 
   try {
-    // Kiểm tra ID hợp lệ
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'ID sản phẩm không hợp lệ' });
     }
 
-    // Debug dữ liệu đầu vào
     console.log('req.body:', req.body);
     console.log('req.files:', req.files);
 
-    // Lấy sản phẩm hiện tại để giữ nguyên images nếu không upload mới
     const existingProduct = await Product.findById(id);
     if (!existingProduct) {
       return res.status(404).json({ error: 'Không tìm thấy sản phẩm để cập nhật' });
     }
 
-    // Xử lý images: giữ nguyên nếu không upload mới
     let images = existingProduct.images || [];
     if (req.files && req.files['images'] && req.files['images'].length > 0) {
       images = req.files['images'].map(file => `images/${file.filename}`);
@@ -259,12 +282,33 @@ exports.updateProduct = async (req, res) => {
       images = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
     }
 
-    // Xử lý các trường mảng với JSON.parse
-    let parsedSpiritualBenefits = [];
-    let parsedHealthBenefits = [];
-    let parsedCareInstructions = [];
-    let parsedSize = [];
+    let parsedCategory = existingProduct.category || {};
+    if (category) {
+      try {
+        parsedCategory = typeof category === 'string' ? JSON.parse(category) : category;
+        if (!parsedCategory.id || !parsedCategory.name_categories) {
+          return res.status(400).json({ error: 'Category phải có id và name_categories' });
+        }
+      } catch (e) {
+        return res.status(400).json({ error: `Lỗi phân tích category: ${e.message}` });
+      }
+    }
 
+    let parsedSize = existingProduct.size || [];
+    if (size) {
+      try {
+        parsedSize = typeof size === 'string' ? JSON.parse(size) : size;
+        if (!Array.isArray(parsedSize) || !parsedSize.every(item => item.stock && item.size_name)) {
+          return res.status(400).json({ error: 'Size phải là mảng các object với stock và size_name' });
+        }
+      } catch (e) {
+        return res.status(400).json({ error: `Lỗi phân tích size: ${e.message}` });
+      }
+    }
+
+    let parsedSpiritualBenefits = existingProduct.spiritual_benefits || [];
+    let parsedHealthBenefits = existingProduct.health_benefits || [];
+    let parsedCareInstructions = existingProduct.care_instructions || [];
     if (spiritual_benefits) {
       try {
         parsedSpiritualBenefits = typeof spiritual_benefits === 'string' ? JSON.parse(spiritual_benefits) : spiritual_benefits;
@@ -286,27 +330,11 @@ exports.updateProduct = async (req, res) => {
         return res.status(400).json({ error: `Lỗi phân tích care_instructions: ${e.message}` });
       }
     }
-    if (size) {
-      try {
-        parsedSize = typeof size === 'string' ? JSON.parse(size) : size;
-        if (!Array.isArray(parsedSize) || parsedSize.length !== 2 || !parsedSize.every(num => Number.isInteger(num))) {
-          return res.status(400).json({ error: 'Kích thước phải là mảng [min, max] với số nguyên' });
-        }
-      } catch (e) {
-        return res.status(400).json({ error: `Lỗi phân tích size: ${e.message}` });
-      }
-    }
 
-    // Đảm bảo các mảng là hợp lệ
-    if (!Array.isArray(parsedSpiritualBenefits)) parsedSpiritualBenefits = [];
-    if (!Array.isArray(parsedHealthBenefits)) parsedHealthBenefits = [];
-    if (!Array.isArray(parsedCareInstructions)) parsedCareInstructions = [];
-
-    // Cập nhật sản phẩm
     const updatedProduct = await Product.findByIdAndUpdate(
       id,
       {
-        category: category || '',
+        category: parsedCategory,
         level: level || '',
         stock: parseInt(stock, 10) || 0,
         Collection: Collection || '',
@@ -316,9 +344,10 @@ exports.updateProduct = async (req, res) => {
         images,
         price: parseInt(price, 10) || 0,
         status: status || 'show',
+        tag: tag || '',
         short_description: short_description || '',
         weight: weight || '',
-        size: parsedSize.length > 0 ? parsedSize : undefined,
+        size: parsedSize,
         material: material || '',
         description: description || '',
         origin: origin || '',
@@ -368,7 +397,7 @@ exports.deleteProduct = async (req, res) => {
 // Chuyển đổi trạng thái hiển thị của sản phẩm
 exports.toggleProductStatus = async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body; 
+  const { status } = req.body;
 
   try {
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -380,14 +409,12 @@ exports.toggleProductStatus = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
     }
 
-    // Kiểm tra trạng thái hợp lệ
     const validStatuses = ['hidden', 'show', 'sale'];
     if (!validStatuses.includes(status.toLowerCase())) {
       return res.status(400).json({ message: 'Trạng thái không hợp lệ' });
     }
 
     product.status = status.toLowerCase();
-
     await product.save();
 
     const updatedProduct = await Product.findById(id);
