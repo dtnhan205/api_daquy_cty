@@ -368,6 +368,7 @@ exports.deleteProduct = async (req, res) => {
 // Chuyển đổi trạng thái hiển thị của sản phẩm
 exports.toggleProductStatus = async (req, res) => {
   const { id } = req.params;
+  const { status } = req.body; 
 
   try {
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -379,9 +380,13 @@ exports.toggleProductStatus = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
     }
 
-    const statusOrder = ['hidden', 'show', 'sale'];
-    const currentIndex = statusOrder.indexOf(product.status.toLowerCase());
-    product.status = statusOrder[(currentIndex + 1) % statusOrder.length];
+    // Kiểm tra trạng thái hợp lệ
+    const validStatuses = ['hidden', 'show', 'sale'];
+    if (!validStatuses.includes(status.toLowerCase())) {
+      return res.status(400).json({ message: 'Trạng thái không hợp lệ' });
+    }
+
+    product.status = status.toLowerCase();
 
     await product.save();
 

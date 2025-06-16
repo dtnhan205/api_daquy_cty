@@ -7,12 +7,6 @@ if (!fs.existsSync(imageUploadDir)) {
   fs.mkdirSync(imageUploadDir, { recursive: true });
 }
 
-const cvUploadDir = path.join(__dirname, '../public/cv');
-if (!fs.existsSync(cvUploadDir)) {
-  fs.mkdirSync(cvUploadDir, { recursive: true });
-  fs.chmodSync(cvUploadDir, 0o755); 
-}
-
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     if (file.fieldname === 'resume') {
