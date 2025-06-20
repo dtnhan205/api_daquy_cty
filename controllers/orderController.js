@@ -70,7 +70,7 @@ exports.checkPaymentStatus = async (req, res) => {
     const order = await Order.findOne({ paymentReference: orderId, isDeleted: false, paymentMethod: 'bank_transfer' });
     if (!order) return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
 
-    const response = await axios.get('https://apicanhan.com/api/mbbankv3?key=7d09d39d42c8f1e3515f11a2be92cb4a&username=dinhthenhan&password=mk123&accountNo=0342031354&ac=1');
+    const response = await axios.get('https://apicanhan.com/api/mbbankv3?key=7d09d39d42c8f1e3515f11a2be92cb4a&username=0342031354&password=Dtn280705&accountNo=0342031354&ac=1');
     const transactions = response.data.transactions;
 
     const transaction = transactions.find(t => t.description.includes(order.paymentReference) && t.amount === order.grandTotal.toString() && t.type === 'IN');
