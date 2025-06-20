@@ -15,4 +15,6 @@ router.put('/:id', authAdmin, orderController.updateOrder);
 
 router.put('/:id/toggle-status', authAdmin, orderController.toggleOrderStatus);
 
+router.post('/check-payment', orderController.checkPaymentStatus);
+
 module.exports = router;

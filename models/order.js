@@ -20,6 +20,9 @@ const orderSchema = new mongoose.Schema({
   grandTotal: { type: Number, required: true },
   status: { type: String, enum: ['Chờ xử lý', 'Đang giao', 'Đã giao'], default: 'Chờ xử lý' },
   isDeleted: { type: Boolean, default: false },
+  paymentReference: { type: String, unique: true },
+  paymentStatus: { type: String, default: 'pending' }, 
+  paymentMethod: { type: String, default: 'bank_transfer' } ,
   createdAt: { type: Date, default: Date.now }
 });
 

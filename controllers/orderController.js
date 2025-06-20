@@ -1,4 +1,5 @@
 const Order = require('../models/order');
+const axios = require('axios');
 
 exports.createOrder = async (req, res) => {
   try {
@@ -16,8 +17,19 @@ exports.createOrder = async (req, res) => {
       products,
       totalAmount,
       grandTotal,
-      status
+      status,
+      paymentMethod
     } = req.body;
+
+    let paymentReference;
+    let isUnique = false;
+
+    while (!isUnique) {
+      const randomNumber = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+      paymentReference = `ThanhToan${randomNumber}`;
+      const existingOrder = await Order.findOne({ paymentReference });
+      if (!existingOrder) isUnique = true;
+    }
 
     const order = new Order({
       fullName,
@@ -34,13 +46,45 @@ exports.createOrder = async (req, res) => {
       totalAmount,
       grandTotal,
       status: status || 'Chờ xử lý',
-      createdAt: new Date()
+      createdAt: new Date(),
+      paymentReference,
+      paymentStatus: paymentMethod === 'cod' ? 'pending_delivery' : 'pending',
+      paymentMethod: paymentMethod || 'bank_transfer'
     });
 
     const savedOrder = await order.save();
-    res.status(201).json(savedOrder);
+    const message = paymentMethod === 'cod'
+      ? 'Đơn hàng đã được tạo. Vui lòng thanh toán khi nhận hàng.'
+      : 'Đơn hàng đã được tạo. Vui lòng quét mã QR để thanh toán.';
+    res.status(201).json({ ...savedOrder.toObject(), message });
   } catch (error) {
     res.status(400).json({ message: 'Có lỗi xảy ra khi tạo đơn hàng' });
+  }
+};
+
+exports.checkPaymentStatus = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    if (!orderId) return res.status(400).json({ message: 'Thiếu orderId' });
+
+    const order = await Order.findOne({ paymentReference: orderId, isDeleted: false, paymentMethod: 'bank_transfer' });
+    if (!order) return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
+
+    const response = await axios.get('https://apicanhan.com/api/mbbankv3?key=7d09d39d42c8f1e3515f11a2be92cb4a&username=dinhthenhan&password=mk123&accountNo=0342031354&ac=1');
+    const transactions = response.data.transactions;
+
+    const transaction = transactions.find(t => t.description.includes(order.paymentReference) && t.amount === order.grandTotal.toString() && t.type === 'IN');
+    if (transaction) {
+      await Order.findByIdAndUpdate(order._id, { paymentStatus: 'paid', status: 'Đang giao' }, { new: true });
+      return res.status(200).json({ message: 'Thanh toán thành công', order });
+    } else if (new Date() - new Date(order.createdAt) > 24 * 60 * 60 * 1000) {
+      await Order.findByIdAndUpdate(order._id, { paymentStatus: 'failed', status: 'Đã hủy' }, { new: true });
+      return res.status(200).json({ message: 'Đơn hàng đã bị hủy do quá thời gian', order });
+    } else {
+      return res.status(200).json({ message: 'Chưa thanh toán', order });
+    }
+  } catch (error) {
+    res.status(400).json({ message: 'Có lỗi xảy ra khi kiểm tra thanh toán' });
   }
 };
 
