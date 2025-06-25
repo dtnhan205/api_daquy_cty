@@ -56,7 +56,8 @@ productSchema.pre('save', async function (next) {
   next();
 });
 
-// Index cho views để tối ưu tìm kiếm sản phẩm nổi bật
+// Index cho slug và views
+productSchema.index({ slug: 1 });
 productSchema.index({ views: -1 });
 
 module.exports = mongoose.model('Product', productSchema);

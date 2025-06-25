@@ -12,6 +12,11 @@ const handleMulterError = (err, req, res, next) => {
   next();
 };
 
+// Kiểm tra slug hợp lệ
+const isValidSlug = (slug) => {
+  return /^[a-z0-9-]+$/i.test(slug);
+};
+
 // Lấy tất cả sản phẩm
 exports.getAllProducts = async (req, res) => {
   try {
@@ -29,21 +34,21 @@ exports.getAllProducts = async (req, res) => {
   }
 };
 
-// Lấy sản phẩm theo _id
-exports.getProductById = async (req, res) => {
+// Lấy sản phẩm theo slug
+exports.findBySlug = async (req, res) => {
   try {
-    const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'ID sản phẩm không hợp lệ' });
+    const { slug } = req.params;
+    if (!isValidSlug(slug)) {
+      return res.status(400).json({ message: 'Slug sản phẩm không hợp lệ' });
     }
 
     const isAdmin = !!req.headers.authorization;
     let product;
     if (isAdmin) {
-      product = await Product.findById(id);
+      product = await Product.findOne({ slug });
     } else {
-      product = await Product.findByIdAndUpdate(
-        id,
+      product = await Product.findOneAndUpdate(
+        { slug },
         { $inc: { views: 1 } },
         { new: true, runValidators: true }
       );
@@ -172,12 +177,12 @@ exports.createProduct = async (req, res) => {
   }
 };
 
-// Cập nhật sản phẩm theo _id
+// Cập nhật sản phẩm theo slug
 exports.updateProduct = async (req, res) => {
   try {
-    const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'ID sản phẩm không hợp lệ' });
+    const { slug } = req.params;
+    if (!isValidSlug(slug)) {
+      return res.status(400).json({ message: 'Slug sản phẩm không hợp lệ' });
     }
 
     const {
@@ -196,7 +201,7 @@ exports.updateProduct = async (req, res) => {
       purchases,
     } = req.body;
 
-    const product = await Product.findById(id);
+    const product = await Product.findOne({ slug });
     if (!product) {
       return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
     }
@@ -235,9 +240,9 @@ exports.updateProduct = async (req, res) => {
       }
     }
 
-    // Cập nhật sản phẩm (slug sẽ được tạo tự động bởi model nếu name thay đổi)
-    const updatedProduct = await Product.findByIdAndUpdate(
-      id,
+    // Cập nhật sản phẩm
+    const updatedProduct = await Product.findOneAndUpdate(
+      { slug },
       {
         category: parsedCategory,
         level: level || product.level,
@@ -266,14 +271,14 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-// Xóa sản phẩm theo _id
+// Xóa sản phẩm theo slug
 exports.deleteProduct = async (req, res) => {
   try {
-    const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'ID sản phẩm không hợp lệ' });
+    const { slug } = req.params;
+    if (!isValidSlug(slug)) {
+      return res.status(400).json({ message: 'Slug sản phẩm không hợp lệ' });
     }
-    const deletedProduct = await Product.findByIdAndDelete(id);
+    const deletedProduct = await Product.findOneAndDelete({ slug });
     if (!deletedProduct) {
       return res.status(404).json({ message: 'Không tìm thấy sản phẩm để xóa' });
     }
@@ -283,16 +288,16 @@ exports.deleteProduct = async (req, res) => {
   }
 };
 
-// Chuyển đổi trạng thái hiển thị của sản phẩm
+// Chuyển đổi trạng thái hiển thị của sản phẩm theo slug
 exports.toggleProductStatus = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { slug } = req.params;
     const { status } = req.body;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'ID sản phẩm không hợp lệ' });
+    if (!isValidSlug(slug)) {
+      return res.status(400).json({ message: 'Slug sản phẩm không hợp lệ' });
     }
 
-    const product = await Product.findById(id);
+    const product = await Product.findOne({ slug });
     if (!product) {
       return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
     }
