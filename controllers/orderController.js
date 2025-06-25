@@ -17,8 +17,7 @@ exports.createOrder = async (req, res) => {
       products,
       totalAmount,
       grandTotal,
-      status,
-      paymentMethod
+      status
     } = req.body;
 
     const order = new Order({
@@ -36,13 +35,11 @@ exports.createOrder = async (req, res) => {
       totalAmount,
       grandTotal,
       status: status || 'Chờ xử lý',
-      createdAt: new Date(),
-      paymentStatus: 'pending_delivery',
-      paymentMethod: 'cod'
+      createdAt: new Date()
     });
 
     const savedOrder = await order.save();
-    res.status(201).json({ ...savedOrder.toObject(), message: 'Đơn hàng đã được tạo. Vui lòng thanh toán khi nhận hàng.' });
+    res.status(201).json(savedOrder);
   } catch (error) {
     res.status(400).json({ message: 'Có lỗi xảy ra khi tạo đơn hàng' });
   }
