@@ -41,9 +41,11 @@ exports.createOrder = async (req, res) => {
     const savedOrder = await order.save();
     res.status(201).json(savedOrder);
   } catch (error) {
-    res.status(400).json({ message: 'Có lỗi xảy ra khi tạo đơn hàng' });
+    console.error('Order create error:', error); // Thêm dòng này để log lỗi chi tiết
+    res.status(400).json({ message: 'Có lỗi xảy ra khi tạo đơn hàng', error: error.message, detail: error.errors });
   }
 };
+
 exports.updateOrder = async (req, res) => {
   try {
     const { id } = req.params;
