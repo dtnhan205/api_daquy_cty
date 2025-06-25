@@ -6,25 +6,27 @@ const Admin = require('../models/admin');
 const { upload, handleMulterError } = require('../middlewares/upload');
 const authAdmin = require('../middlewares/authMiddleware');
 
-
+// Lấy tất cả tin tức
 router.get('/', newsController.getAllNews);
 
-router.get('/:id', newsController.getNewsById);
+// Lấy tin tức theo slug
+router.get('/:slug', newsController.getNewsBySlug);
 
-router.get('/hottest', newsController.getHottestNews); 
+// Tạo tin tức mới (yêu cầu authAdmin và upload file)
 router.post(
-    '/',
-    authAdmin,
-    upload.fields([
-        { name: 'thumbnail', maxCount: 1 },
-        { name: 'contentImages' },
-    ]),
-    handleMulterError,
-    newsController.createNews
+  '/',
+  authAdmin,
+  upload.fields([
+    { name: 'thumbnail', maxCount: 1 },
+    { name: 'contentImages' },
+  ]),
+  handleMulterError,
+  newsController.createNews
 );
 
+// Cập nhật tin tức theo slug
 router.put(
-  '/:id',
+  '/:slug',
   authAdmin,
   upload.fields([
     { name: 'thumbnail', maxCount: 1 },
@@ -34,8 +36,10 @@ router.put(
   newsController.updateNews
 );
 
-router.delete('/:id', authAdmin, newsController.deleteNews);
+// Xóa tin tức theo slug
+router.delete('/:slug', authAdmin, newsController.deleteNews);
 
-router.put('/:id/toggle-visibility', authAdmin, newsController.toggleNewsVisibility);
+// Chuyển đổi trạng thái hiển thị của tin tức theo slug
+router.put('/:slug/toggle-visibility', authAdmin, newsController.toggleNewsVisibility);
 
 module.exports = router;

@@ -1,4 +1,5 @@
 const Category = require('../models/category');
+const Product = require('../models/product'); 
 
 exports.createCategory = async (req, res) => {
   try {
@@ -34,12 +35,35 @@ exports.getCategoryById = async (req, res) => {
 exports.updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { category, status } = req.body;
-    const updatedCategory = await Category.findByIdAndUpdate(id, { category, status }, { new: true, runValidators: true });
-    if (!updatedCategory) return res.status(404).json({ message: 'Không tìm thấy danh mục' });
+    const { category: newCategoryName, status } = req.body;
+
+    if (!newCategoryName) {
+      return res.status(400).json({ message: 'Tên danh mục không được để trống' });
+    }
+
+    const updatedCategory = await Category.findByIdAndUpdate(
+      id,
+      { category: newCategoryName, status },
+      { new: true, runValidators: true }
+    );
+    if (!updatedCategory) {
+      return res.status(404).json({ message: 'Không tìm thấy danh mục' });
+    }
+
+    try {
+      const updateResult = await Product.updateMany(
+        { 'category.id': id },
+        { 'category.name_categories': newCategoryName }
+      );
+      console.log('Số sản phẩm được cập nhật:', updateResult.modifiedCount);
+    } catch (productError) {
+      console.warn('Không thể cập nhật sản phẩm:', productError.message);
+    }
+
     res.status(200).json(updatedCategory);
   } catch (error) {
-    res.status(400).json({ message: 'Có lỗi xảy ra khi cập nhật danh mục' });
+    console.error('Lỗi khi cập nhật danh mục:', error.message);
+    res.status(400).json({ message: 'Có lỗi xảy ra khi cập nhật danh mục', error: error.message });
   }
 };
 

@@ -27,17 +27,17 @@ exports.getAllNews = async (req, res) => {
   }
 };
 
-// Lấy tin tức theo ID (chỉ tăng views nếu không phải admin)
-exports.getNewsById = async (req, res) => {
+// Lấy tin tức theo slug (chỉ tăng views nếu không phải admin)
+exports.getNewsBySlug = async (req, res) => {
   try {
     const isAdmin = !!req.headers.authorization; // Kiểm tra nếu có Authorization header (admin)
 
     let news;
     if (isAdmin) {
-      news = await News.findOne({ id: req.params.id });
+      news = await News.findOne({ slug: req.params.slug });
     } else {
       news = await News.findOneAndUpdate(
-        { id: req.params.id },
+        { slug: req.params.slug },
         { $inc: { views: 1 } },
         { new: true }
       );
@@ -53,50 +53,24 @@ exports.getNewsById = async (req, res) => {
   }
 };
 
-// Lấy bài đăng hot nhất
-exports.getHottestNews = async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 0;
-
-    let query = News.find({ status: 'show' }).sort({ views: -1 });
-
-    if (limit > 0) {
-      query = query.limit(limit);
-    }
-
-    const hottestNewsList = await query;
-
-    if (hottestNewsList.length === 0) {
-      return res.status(404).json({ message: 'Không tìm thấy bài đăng nào' });
-    }
-
-    res.json({
-      message: 'Lấy danh sách bài đăng hot thành công',
-      news: hottestNewsList,
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Lỗi server khi lấy danh sách bài đăng hot', error: error.message });
-  }
-};
-
 // Tạo tin tức mới
 exports.createNews = async (req, res) => {
   try {
     const {
-      title,
+      category_new: { $oid: categoryId } = {},
       slug,
-      category,
+      title,
       thumbnailCaption,
       publishedAt,
       views,
       status,
-      contentBlocks: rawContentBlocks,
+      content,
     } = req.body;
 
     const thumbnail = req.files && req.files['thumbnail'] ? req.files['thumbnail'][0] : null;
     let thumbnailUrl = req.body.thumbnailUrl;
     if (thumbnail) {
-      thumbnailUrl = `images/${thumbnail.filename}`; // Sử dụng file upload nếu có
+      thumbnailUrl = `images/${thumbnail.filename}`;
     }
     if (!thumbnailUrl) {
       return res.status(400).json({ error: 'Thumbnail URL hoặc file là bắt buộc' });
@@ -104,83 +78,17 @@ exports.createNews = async (req, res) => {
 
     const newId = new mongoose.Types.ObjectId().toString();
 
-    let contentBlocks = [];
-    if (rawContentBlocks) {
-      if (typeof rawContentBlocks === 'string') {
-        try {
-          contentBlocks = JSON.parse(rawContentBlocks);
-        } catch (e) {
-          return res.status(400).json({ error: 'contentBlocks JSON không hợp lệ' });
-        }
-      } else if (Array.isArray(rawContentBlocks)) {
-        contentBlocks = rawContentBlocks;
-      }
-    }
-
-    if (!Array.isArray(contentBlocks)) {
-      contentBlocks = [];
-    }
-
-    // Xử lý contentImages
-    const contentImages = req.files && req.files['contentImages'] ? req.files['contentImages'] : [];
-    const uploadedImages = contentImages.map(file => ({
-      type: 'image',
-      id: new mongoose.Types.ObjectId().toString(),
-      url: `images/${file.filename}`,
-      caption: '',
-    }));
-
-    let imageIndex = 0;
-    const finalContentBlocks = contentBlocks.map(block => {
-      if (block.type === 'image') {
-        if (block.url && !block.url.startsWith('blob:') && !block.url.includes('placeholder')) {
-          return { ...block, id: block.id || new mongoose.Types.ObjectId().toString() };
-        }
-        if (imageIndex < uploadedImages.length) {
-          return {
-            ...uploadedImages[imageIndex++],
-            caption: block.caption || '',
-            id: block.id || new mongoose.Types.ObjectId().toString(),
-          };
-        }
-        return null; // Đánh dấu block không hợp lệ
-      }
-      if (block.type === 'text' && !block.content) {
-        return null;
-      }
-      if (block.type === 'list' && (!Array.isArray(block.content) || block.content.length === 0)) {
-        return null;
-      }
-      if (['text', 'heading', 'sub_heading', 'list'].includes(block.type)) {
-        return {
-          ...block,
-          id: block.id || new mongoose.Types.ObjectId().toString(),
-          url: block.url || '',
-          caption: block.caption || '',
-        };
-      }
-      return null;
-    }).filter(block => block !== null);
-
-    while (imageIndex < uploadedImages.length) {
-      finalContentBlocks.push(uploadedImages[imageIndex++]);
-    }
-
-    if (finalContentBlocks.some(block => !['text', 'image', 'heading', 'sub_heading', 'list'].includes(block.type))) {
-      return res.status(400).json({ error: 'Loại contentBlock không hợp lệ' });
-    }
-
     const newNews = new News({
       id: newId,
       title,
       slug,
-      category: category || '',
+      category: categoryId || '',
       thumbnailUrl,
       thumbnailCaption: thumbnailCaption || '',
       publishedAt: new Date(publishedAt),
       views: parseInt(views, 10) || 0,
       status: status || 'show',
-      contentBlocks: finalContentBlocks,
+      htmlContent: content || '', // Lưu nội dung HTML nguyên bản
     });
 
     await newNews.save();
@@ -197,72 +105,24 @@ exports.createNews = async (req, res) => {
   }
 };
 
-// Cập nhật tin tức theo ID
+// Cập nhật tin tức theo slug
 exports.updateNews = async (req, res) => {
-  const { id } = req.params;
+  const { slug } = req.params; // Thay id bằng slug
   const {
+    category_new: { $oid: categoryId } = {},
+    slug: newSlug,
     title,
-    slug,
-    category,
     thumbnailUrl,
     thumbnailCaption,
     publishedAt,
     views,
     status,
-    contentBlocks: rawContentBlocks,
+    content,
   } = req.body;
 
   try {
-    let contentBlocks = typeof rawContentBlocks === 'string' ? JSON.parse(rawContentBlocks) : rawContentBlocks;
-
-    if (!Array.isArray(contentBlocks)) contentBlocks = [];
-
     const files = req.files || {};
     const thumbnail = files['thumbnail'] && files['thumbnail'].length > 0 ? files['thumbnail'][0] : null;
-    const contentImages = files['contentImages'] && Array.isArray(files['contentImages']) ? files['contentImages'] : [];
-
-    const uploadedImages = contentImages.map(file => ({
-      type: 'image',
-      id: new mongoose.Types.ObjectId().toString(),
-      url: `images/${file.filename}`,
-      caption: '',
-    }));
-
-    let imageIndex = 0;
-    const finalContentBlocks = contentBlocks.map(block => {
-      if (block.type === 'image') {
-        if (block.url && !block.url.startsWith('blob:') && !block.url.includes('placeholder')) {
-          return { ...block, id: block.id || new mongoose.Types.ObjectId().toString() };
-        }
-        if (imageIndex < uploadedImages.length) {
-          return {
-            ...uploadedImages[imageIndex++],
-            caption: block.caption || '',
-            id: block.id || new mongoose.Types.ObjectId().toString(),
-          };
-        }
-        return null;
-      }
-      if (block.type === 'text' && (!block.content || typeof block.content !== 'string')) {
-        return null;
-      }
-      if (block.type === 'list' && (!Array.isArray(block.content) || block.content.length === 0)) {
-        return null;
-      }
-      if (['text', 'heading', 'sub_heading', 'list'].includes(block.type)) {
-        return {
-          ...block,
-          id: block.id || new mongoose.Types.ObjectId().toString(),
-          url: block.url || '',
-          caption: block.caption || '',
-        };
-      }
-      return null;
-    }).filter(block => block !== null);
-
-    while (imageIndex < uploadedImages.length) {
-      finalContentBlocks.push(uploadedImages[imageIndex++]);
-    }
 
     const finalThumbnailUrl = thumbnail ? `images/${thumbnail.filename}` : (thumbnailUrl || '');
 
@@ -271,17 +131,17 @@ exports.updateNews = async (req, res) => {
     }
 
     const updatedNews = await News.findOneAndUpdate(
-      { id },
+      { slug }, // Tìm theo slug
       {
         title,
-        slug,
-        category: category || '',
+        slug: newSlug || slug, // Cập nhật slug nếu có newSlug, nếu không giữ nguyên slug cũ
+        category: categoryId || '',
         thumbnailUrl: finalThumbnailUrl,
         thumbnailCaption: thumbnailCaption || '',
         publishedAt: publishedAt ? new Date(publishedAt) : undefined,
         views: parseInt(views, 10) || 0,
         status: status || 'show',
-        contentBlocks: finalContentBlocks,
+        htmlContent: content || '', // Lưu nội dung HTML nguyên bản
       },
       { new: true, runValidators: true }
     );
@@ -293,33 +153,33 @@ exports.updateNews = async (req, res) => {
       news: updatedNews,
     });
   } catch (err) {
-    console.error(`PUT /api/news/${id} error:`, err);
+    console.error(`PUT /api/news/${slug} error:`, err);
     res.status(400).json({ error: err.message });
   }
 };
 
-// Xóa tin tức theo ID
+// Xóa tin tức theo slug
 exports.deleteNews = async (req, res) => {
-  const { id } = req.params;
+  const { slug } = req.params; // Thay id bằng slug
 
   try {
-    const deletedNews = await News.findOneAndDelete({ id });
+    const deletedNews = await News.findOneAndDelete({ slug });
     if (!deletedNews) {
       return res.status(404).json({ message: 'Không tìm thấy tin tức để xóa' });
     }
     res.json({ message: 'Xóa tin tức thành công' });
   } catch (err) {
-    console.error(`DELETE /api/news/${id} error:`, err);
+    console.error(`DELETE /api/news/${slug} error:`, err);
     res.status(500).json({ error: 'Lỗi máy chủ' });
   }
 };
 
-// Chuyển đổi trạng thái hiển thị của tin tức
+// Chuyển đổi trạng thái hiển thị của tin tức theo slug
 exports.toggleNewsVisibility = async (req, res) => {
-  const { id } = req.params;
+  const { slug } = req.params; // Thay id bằng slug
 
   try {
-    const news = await News.findOne({ id });
+    const news = await News.findOne({ slug });
     if (!news) {
       return res.status(404).json({ message: 'Không tìm thấy tin tức' });
     }
@@ -327,14 +187,14 @@ exports.toggleNewsVisibility = async (req, res) => {
     news.status = news.status === 'show' ? 'hidden' : 'show';
     await news.save();
 
-    const updatedNews = await News.findOne({ id });
+    const updatedNews = await News.findOne({ slug });
 
     res.json({
       message: `Tin tức đã được ${updatedNews.status === 'show' ? 'hiển thị' : 'ẩn'}`,
       news: updatedNews,
     });
   } catch (err) {
-    console.error(`PUT /api/news/${id}/toggle-visibility error:`, err);
+    console.error(`PUT /api/news/${slug}/toggle-visibility error:`, err);
     res.status(500).json({ error: 'Lỗi máy chủ' });
   }
 };
