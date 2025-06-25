@@ -10,7 +10,7 @@ router.get('/featured', productController.getFeaturedProducts);
 router.get('/sale', productController.getSaleProducts); 
 router.get('/', productController.getAllProducts);
 
-router.get('/:id', productController.getProductById);
+router.get('/slug/:slug', productController.findBySlug);
 
 router.post(
   '/',
@@ -21,15 +21,15 @@ router.post(
 );
 
 router.put(
-  '/:id',
+  '/:slug',
   authAdmin,
   upload.array('images', 10),
   handleMulterError,
   productController.updateProduct
 );
 
-router.delete('/:id', authAdmin, productController.deleteProduct);
+router.delete('/:slug', authAdmin, productController.deleteProduct);
 
-router.put('/:id/toggle-status', authAdmin, productController.toggleProductStatus);
+router.put('/:slug/toggle-status', authAdmin, productController.toggleProductStatus);
 
 module.exports = router;
