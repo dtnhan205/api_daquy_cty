@@ -20,7 +20,6 @@ router.post(
     { name: 'thumbnail', maxCount: 1 },
     { name: 'contentImages' },
   ]),
-  handleMulterError,
   newsController.createNews
 );
 
@@ -32,7 +31,6 @@ router.put(
     { name: 'thumbnail', maxCount: 1 },
     { name: 'contentImages' },
   ]),
-  handleMulterError,
   newsController.updateNews
 );
 

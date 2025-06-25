@@ -19,7 +19,7 @@ exports.getAllNews = async (req, res) => {
   try {
     const newsList = await News.find().sort({ publishedAt: -1 });
     if (newsList.length === 0) {
-      return res.status(404).json({ message: "Không tìm thấy tin tức nào" });
+      return res.status(404).json({ message: 'Không tìm thấy tin tức nào' });
     }
     res.json(newsList);
   } catch (error) {
@@ -30,7 +30,7 @@ exports.getAllNews = async (req, res) => {
 // Lấy tin tức theo slug (chỉ tăng views nếu không phải admin)
 exports.getNewsBySlug = async (req, res) => {
   try {
-    const isAdmin = !!req.headers.authorization; // Kiểm tra nếu có Authorization header (admin)
+    const isAdmin = !!req.headers.authorization;
 
     let news;
     if (isAdmin) {
@@ -44,7 +44,7 @@ exports.getNewsBySlug = async (req, res) => {
     }
 
     if (!news) {
-      return res.status(404).json({ message: "Không tìm thấy tin tức" });
+      return res.status(404).json({ message: 'Không tìm thấy tin tức' });
     }
 
     res.json(news);
@@ -57,7 +57,7 @@ exports.getNewsBySlug = async (req, res) => {
 exports.createNews = async (req, res) => {
   try {
     const {
-      category_new: { $oid: categoryId } = {},
+      category,
       slug,
       title,
       thumbnailCaption,
@@ -66,6 +66,11 @@ exports.createNews = async (req, res) => {
       status,
       content,
     } = req.body;
+
+    // Validate slug format
+    if (!validator.matches(slug, /^[a-z0-9-]+$/)) {
+      return res.status(400).json({ error: 'Slug không hợp lệ: chỉ được chứa chữ cái, số và dấu gạch ngang' });
+    }
 
     const thumbnail = req.files && req.files['thumbnail'] ? req.files['thumbnail'][0] : null;
     let thumbnailUrl = req.body.thumbnailUrl;
@@ -76,19 +81,23 @@ exports.createNews = async (req, res) => {
       return res.status(400).json({ error: 'Thumbnail URL hoặc file là bắt buộc' });
     }
 
-    const newId = new mongoose.Types.ObjectId().toString();
+    // Xử lý contentImages và chèn vào content (nếu có)
+    let updatedContent = content || '';
+    if (req.files && req.files['contentImages']) {
+      const contentImages = req.files['contentImages'].map(file => `<p><img src="images/${file.filename}" alt=""></p>`);
+      updatedContent += contentImages.join('');
+    }
 
     const newNews = new News({
-      id: newId,
       title,
       slug,
-      category: categoryId || '',
+      category: category || '',
       thumbnailUrl,
       thumbnailCaption: thumbnailCaption || '',
-      publishedAt: new Date(publishedAt),
+      publishedAt: new Date(publishedAt || Date.now()),
       views: parseInt(views, 10) || 0,
       status: status || 'show',
-      htmlContent: content || '', // Lưu nội dung HTML nguyên bản
+      content: updatedContent,
     });
 
     await newNews.save();
@@ -99,7 +108,10 @@ exports.createNews = async (req, res) => {
   } catch (err) {
     console.error('POST /api/news error:', err);
     if (err.code === 11000) {
-      return res.status(400).json({ error: `ID hoặc slug đã tồn tại` });
+      return res.status(400).json({ error: 'Slug đã tồn tại' });
+    }
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ error: `Dữ liệu không hợp lệ: ${err.message}` });
     }
     res.status(400).json({ error: err.message });
   }
@@ -107,9 +119,9 @@ exports.createNews = async (req, res) => {
 
 // Cập nhật tin tức theo slug
 exports.updateNews = async (req, res) => {
-  const { slug } = req.params; // Thay id bằng slug
+  const { slug } = req.params;
   const {
-    category_new: { $oid: categoryId } = {},
+    category,
     slug: newSlug,
     title,
     thumbnailUrl,
@@ -121,6 +133,11 @@ exports.updateNews = async (req, res) => {
   } = req.body;
 
   try {
+    // Validate newSlug if provided
+    if (newSlug && !validator.matches(newSlug, /^[a-z0-9-]+$/)) {
+      return res.status(400).json({ error: 'Slug mới không hợp lệ: chỉ được chứa chữ cái, số và dấu gạch ngang' });
+    }
+
     const files = req.files || {};
     const thumbnail = files['thumbnail'] && files['thumbnail'].length > 0 ? files['thumbnail'][0] : null;
 
@@ -131,17 +148,17 @@ exports.updateNews = async (req, res) => {
     }
 
     const updatedNews = await News.findOneAndUpdate(
-      { slug }, // Tìm theo slug
+      { slug },
       {
         title,
-        slug: newSlug || slug, // Cập nhật slug nếu có newSlug, nếu không giữ nguyên slug cũ
-        category: categoryId || '',
+        slug: newSlug || slug,
+        category: category || '',
         thumbnailUrl: finalThumbnailUrl,
         thumbnailCaption: thumbnailCaption || '',
         publishedAt: publishedAt ? new Date(publishedAt) : undefined,
         views: parseInt(views, 10) || 0,
         status: status || 'show',
-        htmlContent: content || '', // Lưu nội dung HTML nguyên bản
+        content: content || '',
       },
       { new: true, runValidators: true }
     );
@@ -154,13 +171,19 @@ exports.updateNews = async (req, res) => {
     });
   } catch (err) {
     console.error(`PUT /api/news/${slug} error:`, err);
+    if (err.code === 11000) {
+      return res.status(400).json({ error: 'Slug mới đã tồn tại' });
+    }
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ error: `Dữ liệu không hợp lệ: ${err.message}` });
+    }
     res.status(400).json({ error: err.message });
   }
 };
 
 // Xóa tin tức theo slug
 exports.deleteNews = async (req, res) => {
-  const { slug } = req.params; // Thay id bằng slug
+  const { slug } = req.params;
 
   try {
     const deletedNews = await News.findOneAndDelete({ slug });
@@ -170,13 +193,13 @@ exports.deleteNews = async (req, res) => {
     res.json({ message: 'Xóa tin tức thành công' });
   } catch (err) {
     console.error(`DELETE /api/news/${slug} error:`, err);
-    res.status(500).json({ error: 'Lỗi máy chủ' });
+    res.status(500).json({ error: 'Lỗi máy chủ', details: err.message });
   }
 };
 
 // Chuyển đổi trạng thái hiển thị của tin tức theo slug
 exports.toggleNewsVisibility = async (req, res) => {
-  const { slug } = req.params; // Thay id bằng slug
+  const { slug } = req.params;
 
   try {
     const news = await News.findOne({ slug });
@@ -185,17 +208,18 @@ exports.toggleNewsVisibility = async (req, res) => {
     }
 
     news.status = news.status === 'show' ? 'hidden' : 'show';
-    await news.save();
-
-    const updatedNews = await News.findOne({ slug });
+    await news.save({ validateBeforeSave: true });
 
     res.json({
-      message: `Tin tức đã được ${updatedNews.status === 'show' ? 'hiển thị' : 'ẩn'}`,
-      news: updatedNews,
+      message: `Tin tức đã được ${news.status === 'show' ? 'hiển thị' : 'ẩn'}`,
+      news,
     });
   } catch (err) {
     console.error(`PUT /api/news/${slug}/toggle-visibility error:`, err);
-    res.status(500).json({ error: 'Lỗi máy chủ' });
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ error: `Dữ liệu không hợp lệ: ${err.message}` });
+    }
+    res.status(500).json({ error: 'Lỗi máy chủ', details: err.message });
   }
 };
 

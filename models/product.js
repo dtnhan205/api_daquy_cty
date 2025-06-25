@@ -12,7 +12,7 @@ const productSchema = new mongoose.Schema({
   slug: { type: String, required: true, unique: true },
   images: [{ type: String }],
   price: { type: Number, default: 0 },
-  status: { type: String, default: 'show' },
+  status: { type: String, enum: ['hidden', 'show', 'sale'], default: 'show', required: true },
   tag: { type: String, default: 'new' },
   short_description: { type: String, default: '' },
   weight: { type: String, default: '' },

@@ -19,24 +19,18 @@ const isValidSlug = (slug) => {
 
 // Hàm tạo slug từ tên sản phẩm
 const generateSlug = async (name, attempt = 0) => {
-  // Chuyển tên thành slug: loại bỏ ký tự đặc biệt, chuyển thành chữ thường, thay khoảng trắng bằng dấu gạch ngang
   let slug = name
     .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '') // Loại bỏ ký tự đặc biệt
+    .replace(/[^a-z0-9\s-]/g, '')
     .trim()
-    .replace(/\s+/g, '-') // Thay khoảng trắng bằng dấu gạch ngang
-    .replace(/-+/g, '-'); // Loại bỏ nhiều dấu gạch ngang liên tiếp
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
 
-  // Nếu có attempt > 0, thêm hậu tố
   const finalSlug = attempt > 0 ? `${slug}-${attempt}` : slug;
-
-  // Kiểm tra xem slug đã tồn tại chưa
   const existingProduct = await Product.findOne({ slug: finalSlug });
   if (existingProduct) {
-    // Nếu slug đã tồn tại, thử lại với attempt tăng lên
     return generateSlug(name, attempt + 1);
   }
-
   return finalSlug;
 };
 
@@ -139,15 +133,12 @@ exports.createProduct = async (req, res) => {
       purchases,
     } = req.body;
 
-    // Kiểm tra tên sản phẩm
     if (!name) {
       return res.status(400).json({ error: 'Tên sản phẩm là bắt buộc' });
     }
 
-    // Tạo slug từ tên sản phẩm
     const slug = await generateSlug(name);
 
-    // Xử lý images
     const images = req.files && req.files.length > 0
       ? req.files.map(file => `images/${file.filename}`)
       : [];
@@ -155,7 +146,6 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ error: 'Cần ít nhất một hình ảnh sản phẩm' });
     }
 
-    // Xử lý category
     let parsedCategory;
     try {
       parsedCategory = typeof category === 'string' ? JSON.parse(category) : category;
@@ -166,7 +156,6 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ error: `Lỗi phân tích category: ${e.message}` });
     }
 
-    // Xử lý size
     let parsedSize = [];
     if (size) {
       try {
@@ -179,14 +168,13 @@ exports.createProduct = async (req, res) => {
       }
     }
 
-    // Tạo sản phẩm mới
     const newProduct = new Product({
       category: parsedCategory,
       level: level || '',
       stock: parseInt(stock, 10) || 0,
       element: element || '',
       name,
-      slug, // Thêm slug vào sản phẩm
+      slug,
       images,
       price: parseInt(price, 10) || 0,
       status: status || 'show',
@@ -238,13 +226,11 @@ exports.updateProduct = async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
     }
 
-    // Tạo slug mới nếu name thay đổi
     let newSlug = product.slug;
     if (name && name !== product.name) {
       newSlug = await generateSlug(name);
     }
 
-    // Xử lý images
     let images = product.images;
     if (req.files && req.files.length > 0) {
       images = req.files.map(file => `images/${file.filename}`);
@@ -252,7 +238,6 @@ exports.updateProduct = async (req, res) => {
       images = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
     }
 
-    // Xử lý category
     let parsedCategory = product.category;
     if (category) {
       try {
@@ -265,7 +250,6 @@ exports.updateProduct = async (req, res) => {
       }
     }
 
-    // Xử lý size
     let parsedSize = product.size;
     if (size) {
       try {
@@ -278,7 +262,6 @@ exports.updateProduct = async (req, res) => {
       }
     }
 
-    // Cập nhật sản phẩm
     const updatedProduct = await Product.findOneAndUpdate(
       { slug },
       {
@@ -332,25 +315,42 @@ exports.toggleProductStatus = async (req, res) => {
   try {
     const { slug } = req.params;
     const { status } = req.body;
+
+    console.log('Request params:', req.params); // Debug: kiểm tra slug
+    console.log('Request body:', req.body);    // Debug: kiểm tra status
+
     if (!isValidSlug(slug)) {
       return res.status(400).json({ message: 'Slug sản phẩm không hợp lệ' });
     }
 
+    if (!status) {
+      return res.status(400).json({ message: 'Trạng thái (status) là bắt buộc' });
+    }
+
     const product = await Product.findOne({ slug });
     if (!product) {
-      return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
+      return res.status(404).json({ message: 'Không tìm thấy sản phẩm với slug: ' + slug });
     }
 
     const validStatuses = ['hidden', 'show', 'sale'];
-    if (!validStatuses.includes(status?.toLowerCase())) {
-      return res.status(400).json({ message: 'Trạng thái không hợp lệ' });
+    const newStatus = status.toLowerCase();
+    if (!validStatuses.includes(newStatus)) {
+      return res.status(400).json({ message: 'Trạng thái không hợp lệ. Chỉ chấp nhận: hidden, show, sale' });
     }
 
-    product.status = status.toLowerCase();
-    await product.save();
-    res.json({ message: `Trạng thái sản phẩm đã được cập nhật thành ${status}`, product });
+    product.status = newStatus;
+    const updatedProduct = await product.save({ validateModifiedOnly: true });
+    res.json({ message: `Trạng thái sản phẩm đã được cập nhật thành ${newStatus}`, product: updatedProduct });
   } catch (err) {
-    res.status(500).json({ error: 'Lỗi máy chủ' });
+    console.error('Lỗi khi cập nhật trạng thái:', err); // Log chi tiết lỗi
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ error: `Lỗi validation: ${err.message}` });
+    } else if (err.name === 'MongoError' && err.code === 11000) {
+      return res.status(400).json({ error: 'Lỗi trùng lặp dữ liệu' });
+    } else if (err.name === 'CastError') {
+      return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
+    }
+    res.status(500).json({ error: 'Lỗi máy chủ', details: err.message });
   }
 };
 
