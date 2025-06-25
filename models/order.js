@@ -12,9 +12,11 @@ const orderSchema = new mongoose.Schema({
   address: { type: String, required: true },
   orderNote: { type: String },
   products: [{
-    productName: String,
-    size: String,
-    subTotal: Number
+    productId: { type: String, required: true },
+    productName: { type: String, required: true },
+    quantity: { type: Number, required: true },
+    price: { type: Number, required: true }
+    // Nếu muốn lưu thêm size_name thì thêm: size_name: String
   }],
   totalAmount: { type: Number, required: true },
   grandTotal: { type: Number, required: true },
