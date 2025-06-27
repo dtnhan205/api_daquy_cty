@@ -85,9 +85,25 @@ exports.toggleCategoryStatus = async (req, res) => {
     if (!category) return res.status(404).json({ message: 'Không tìm thấy danh mục' });
 
     const newStatus = category.status === 'show' ? 'hidden' : 'show';
-    const updatedCategory = await Category.findByIdAndUpdate(id, { status: newStatus }, { new: true, runValidators: true });
+    const updatedCategory = await Category.findByIdAndUpdate(
+      id,
+      { status: newStatus },
+      { new: true, runValidators: true }
+    );
+
+    try {
+      const updateResult = await Product.updateMany(
+        { 'category.id': id },
+        { status: newStatus }
+      );
+      console.log('Số sản phẩm được cập nhật trạng thái:', updateResult.modifiedCount);
+    } catch (productError) {
+      console.warn('Không thể cập nhật trạng thái sản phẩm:', productError.message);
+    }
+
     res.status(200).json(updatedCategory);
   } catch (error) {
-    res.status(400).json({ message: 'Có lỗi xảy ra khi thay đổi trạng thái danh mục' });
+    console.error('Lỗi khi thay đổi trạng thái danh mục:', error.message);
+    res.status(400).json({ message: 'Có lỗi xảy ra khi thay đổi trạng thái danh mục', error: error.message });
   }
 };

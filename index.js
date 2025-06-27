@@ -8,6 +8,7 @@ const orderRouter = require('./routes/orderRouter');
 const categoryRouter = require('./routes/categoryRouter');
 const discountRouter = require('./routes/discountRouter');
 const newCategoryRouter = require('./routes/newCategoryRouter');
+const contactRouter = require('./routes/contactRouter');
 require('dotenv').config();
 
 const app = express();
@@ -62,6 +63,7 @@ app.use('/api/order', orderRouter);
 app.use('/api/category', categoryRouter)
 app.use('/api/discount', discountRouter);
 app.use('/api/new-category', newCategoryRouter);
+app.use('/api/contact', contactRouter);
 app.use(express.static('public'));
 
 app.get('/health', (req, res) => {

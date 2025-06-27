@@ -50,6 +50,22 @@ exports.getAllProducts = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server khi lấy sản phẩm', error: error.message });
   }
 };
+// Lấy tất cả sản phẩm có trạng thái show
+exports.getAllShowProducts = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    if (limit < 0) {
+      return res.status(400).json({ error: 'Giá trị limit phải là số nguyên không âm' });
+    }
+    const productList = await Product.find({ status: 'show' }).sort({ createdAt: -1 }).limit(limit);
+    if (!productList.length) {
+      return res.status(404).json({ message: 'Không tìm thấy sản phẩm nào có trạng thái show' });
+    }
+    res.json(productList);
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi server khi lấy sản phẩm có trạng thái show', error: error.message });
+  }
+};
 
 // Lấy sản phẩm theo slug
 exports.findBySlug = async (req, res) => {
@@ -79,17 +95,45 @@ exports.findBySlug = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server khi lấy sản phẩm', error: error.message });
   }
 };
+// Lấy sản phẩm theo slug chỉ khi có trạng thái show
+exports.getShowProductBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    if (!isValidSlug(slug)) {
+      return res.status(400).json({ message: 'Slug sản phẩm không hợp lệ' });
+    }
 
-// Lấy sản phẩm nổi bật (dựa trên views)
+    const isAdmin = !!req.headers.authorization;
+    let product;
+    if (isAdmin) {
+      product = await Product.findOne({ slug, status: 'show' });
+    } else {
+      product = await Product.findOneAndUpdate(
+        { slug, status: 'show' },
+        { $inc: { views: 1 } },
+        { new: true, runValidators: true }
+      );
+    }
+
+    if (!product) {
+      return res.status(404).json({ message: 'Không tìm thấy sản phẩm có trạng thái show với slug này' });
+    }
+    res.json(product);
+  } catch (error) {
+    res.status(500).json({ message: 'Lỗi server khi lấy sản phẩm có trạng thái show', error: error.message });
+  }
+};
+
+// Lấy sản phẩm nổi bật (dựa trên views, chỉ lấy status: show)
 exports.getFeaturedProducts = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
     if (limit < 0) {
       return res.status(400).json({ error: 'Giá trị limit phải là số nguyên không âm' });
     }
-    const featuredProducts = await Product.find().sort({ views: -1 }).limit(limit);
+    const featuredProducts = await Product.find({ status: 'show' }).sort({ views: -1 }).limit(limit);
     if (!featuredProducts.length) {
-      return res.status(404).json({ message: 'Không tìm thấy sản phẩm nổi bật nào' });
+      return res.status(404).json({ message: 'Không tìm thấy sản phẩm nổi bật nào có trạng thái show' });
     }
     res.json({ message: 'Lấy danh sách sản phẩm nổi bật thành công', products: featuredProducts });
   } catch (error) {
@@ -97,16 +141,16 @@ exports.getFeaturedProducts = async (req, res) => {
   }
 };
 
-// Lấy sản phẩm đang sale
+// Lấy sản phẩm đang sale (chỉ lấy status: show)
 exports.getSaleProducts = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
     if (limit < 0) {
       return res.status(400).json({ error: 'Giá trị limit phải là số nguyên không âm' });
     }
-    const saleProducts = await Product.find({ tag: 'sale' }).sort({ createdAt: -1 }).limit(limit);
+    const saleProducts = await Product.find({ tag: 'sale', status: 'show' }).sort({ createdAt: -1 }).limit(limit);
     if (!saleProducts.length) {
-      return res.status(404).json({ message: 'Không tìm thấy sản phẩm sale nào' });
+      return res.status(404).json({ message: 'Không tìm thấy sản phẩm sale nào có trạng thái show' });
     }
     res.json({ message: 'Lấy danh sách sản phẩm sale thành công', products: saleProducts });
   } catch (error) {

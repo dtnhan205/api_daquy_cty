@@ -5,13 +5,13 @@ const jwt = require('jsonwebtoken');
 const { upload, handleMulterError } = require('../middlewares/upload');
 const authAdmin = require('../middlewares/authMiddleware');
 
-// Routes không yêu cầu authentication
 router.get('/featured', productController.getFeaturedProducts);
 router.get('/sale', productController.getSaleProducts); 
-router.get('/', productController.getAllProducts);
-router.get('/slug/:slug', productController.findBySlug);
+router.get('/', authAdmin, productController.getAllProducts);
+router.get('/show', productController.getAllShowProducts);
+router.get('/slug/:slug',authAdmin, productController.findBySlug);
+router.get('/show/slug/:slug', productController.getShowProductBySlug);
 
-// Routes yêu cầu authentication và upload
 router.post(
   '/',
   authAdmin,
