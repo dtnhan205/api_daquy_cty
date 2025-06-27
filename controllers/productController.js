@@ -362,6 +362,7 @@ exports.toggleProductStatus = async (req, res) => {
 
     console.log('Request params:', req.params); // Debug: kiểm tra slug
     console.log('Request body:', req.body);    // Debug: kiểm tra status
+    console.log('Query to find product:', { slug }); // Debug: truy vấn trước khi thực hiện
 
     if (!isValidSlug(slug)) {
       return res.status(400).json({ message: 'Slug sản phẩm không hợp lệ' });
@@ -371,10 +372,16 @@ exports.toggleProductStatus = async (req, res) => {
       return res.status(400).json({ message: 'Trạng thái (status) là bắt buộc' });
     }
 
-    const product = await Product.findOne({ slug });
+    // Tìm sản phẩm theo slug và log trạng thái hiện tại
+    const query = { slug };
+    console.log('Actual query sent to MongoDB:', query); // Log truy vấn thực tế
+    const product = await Product.findOne(query);
+    console.log('Product found:', product ? product : 'Not found'); // Debug: kết quả tìm kiếm
     if (!product) {
-      return res.status(404).json({ message: 'Không tìm thấy sản phẩm với slug: ' + slug });
+      return res.status(404).json({ message: `Không tìm thấy sản phẩm với slug: ${slug}` });
     }
+    console.log('Product _id:', product._id); // Debug: kiểm tra _id của sản phẩm
+    console.log('Current product status:', product.status); // Debug: trạng thái hiện tại
 
     const validStatuses = ['hidden', 'show', 'sale'];
     const newStatus = status.toLowerCase();
@@ -382,8 +389,14 @@ exports.toggleProductStatus = async (req, res) => {
       return res.status(400).json({ message: 'Trạng thái không hợp lệ. Chỉ chấp nhận: hidden, show, sale' });
     }
 
-    product.status = newStatus;
-    const updatedProduct = await product.save({ validateModifiedOnly: true });
+    // Sử dụng findOneAndUpdate để tránh hook
+    const updatedProduct = await Product.findOneAndUpdate(
+      { slug },
+      { status: newStatus },
+      { new: true, runValidators: true }
+    );
+    if (!updatedProduct) throw new Error('Cập nhật thất bại');
+    console.log('Updated product status:', updatedProduct.status); // Debug: trạng thái sau khi cập nhật
     res.json({ message: `Trạng thái sản phẩm đã được cập nhật thành ${newStatus}`, product: updatedProduct });
   } catch (err) {
     console.error('Lỗi khi cập nhật trạng thái:', err); // Log chi tiết lỗi
@@ -393,6 +406,8 @@ exports.toggleProductStatus = async (req, res) => {
       return res.status(400).json({ error: 'Lỗi trùng lặp dữ liệu' });
     } else if (err.name === 'CastError') {
       return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
+    } else if (err.name === 'DocumentNotFoundError') {
+      return res.status(404).json({ error: 'Không tìm thấy tài liệu trong database', details: err.message });
     }
     res.status(500).json({ error: 'Lỗi máy chủ', details: err.message });
   }
