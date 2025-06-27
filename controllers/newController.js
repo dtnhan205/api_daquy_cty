@@ -72,6 +72,7 @@ exports.createNews = async (req, res) => {
       return res.status(400).json({ error: 'Slug không hợp lệ: chỉ được chứa chữ cái, số và dấu gạch ngang' });
     }
 
+    // Xử lý thumbnail
     const thumbnail = req.files && req.files['thumbnail'] ? req.files['thumbnail'][0] : null;
     let thumbnailUrl = req.body.thumbnailUrl;
     if (thumbnail) {
@@ -81,11 +82,20 @@ exports.createNews = async (req, res) => {
       return res.status(400).json({ error: 'Thumbnail URL hoặc file là bắt buộc' });
     }
 
-    // Xử lý contentImages và chèn vào content (nếu có)
+    // Xử lý nội dung HTML và hình ảnh
     let updatedContent = content || '';
     if (req.files && req.files['contentImages']) {
-      const contentImages = req.files['contentImages'].map(file => `<p><img src="images/${file.filename}" alt=""></p>`);
-      updatedContent += contentImages.join('');
+      const $ = cheerio.load(updatedContent, { decodeEntities: false }); // Load nội dung HTML
+      const contentImages = req.files['contentImages'];
+
+      // Lặp qua các file ảnh và thay thế trong nội dung
+      contentImages.forEach((file, index) => {
+        const imageUrl = `images/${file.filename}`;
+        // Giả sử frontend gửi các thẻ <img> với data-index để đánh dấu
+        $(`img[data-index="${index}"]`).attr('src', imageUrl).removeAttr('data-index');
+      });
+
+      updatedContent = $.html(); // Cập nhật nội dung HTML
     }
 
     const newNews = new News({
@@ -138,13 +148,27 @@ exports.updateNews = async (req, res) => {
       return res.status(400).json({ error: 'Slug mới không hợp lệ: chỉ được chứa chữ cái, số và dấu gạch ngang' });
     }
 
+    // Xử lý thumbnail
     const files = req.files || {};
     const thumbnail = files['thumbnail'] && files['thumbnail'].length > 0 ? files['thumbnail'][0] : null;
-
     const finalThumbnailUrl = thumbnail ? `images/${thumbnail.filename}` : (thumbnailUrl || '');
 
     if (!finalThumbnailUrl) {
       return res.status(400).json({ error: 'Thumbnail URL hoặc file là bắt buộc' });
+    }
+
+    // Xử lý nội dung HTML và hình ảnh
+    let updatedContent = content || '';
+    if (files['contentImages']) {
+      const $ = cheerio.load(updatedContent, { decodeEntities: false });
+      const contentImages = files['contentImages'];
+
+      contentImages.forEach((file, index) => {
+        const imageUrl = `images/${file.filename}`;
+        $(`img[data-index="${index}"]`).attr('src', imageUrl).removeAttr('data-index');
+      });
+
+      updatedContent = $.html();
     }
 
     const updatedNews = await News.findOneAndUpdate(
@@ -158,7 +182,7 @@ exports.updateNews = async (req, res) => {
         publishedAt: publishedAt ? new Date(publishedAt) : undefined,
         views: parseInt(views, 10) || 0,
         status: status || 'show',
-        content: content || '',
+        content: updatedContent,
       },
       { new: true, runValidators: true }
     );
