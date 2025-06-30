@@ -4,40 +4,55 @@ const newsController = require('../controllers/newController');
 const jwt = require('jsonwebtoken');
 const Admin = require('../models/admin');
 const { upload, handleMulterError } = require('../middlewares/upload');
-const authAdmin = require('../middlewares/authMiddleware');
 
-// Lấy tất cả tin tức
+// Middleware xác thực admin
+const authAdmin = async (req, res, next) => {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) {
+        return res.status(401).json({ message: 'Không có token, truy cập bị từ chối' });
+    }
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const admin = await Admin.findOne({ _id: decoded.id, role: 'admin' });
+        if (!admin) {
+            return res.status(401).json({ message: 'Không có quyền admin' });
+        }
+        req.admin = admin;
+        next();
+    } catch (error) {
+        res.status(401).json({ message: 'Token không hợp lệ', error: error.message });
+    }
+};
+
 router.get('/', newsController.getAllNews);
 
-// Lấy tin tức theo slug
-router.get('/:slug', newsController.getNewsBySlug);
+router.get('/:id', newsController.getNewsById);
 
-// Tạo tin tức mới (yêu cầu authAdmin và upload file)
+router.get('/hottest', newsController.getHottestNews); 
 router.post(
-  '/',
-  authAdmin,
-  upload.fields([
-    { name: 'thumbnail', maxCount: 1 },
-    { name: 'contentImages' },
-  ]),
-  newsController.createNews
+    '/',
+    authAdmin,
+    upload.fields([
+        { name: 'thumbnail', maxCount: 1 },
+        { name: 'contentImages' },
+    ]),
+    handleMulterError,
+    newsController.createNews
 );
 
-// Cập nhật tin tức theo slug
 router.put(
-  '/:slug',
+  '/:id',
   authAdmin,
   upload.fields([
     { name: 'thumbnail', maxCount: 1 },
     { name: 'contentImages' },
   ]),
+  handleMulterError,
   newsController.updateNews
 );
 
-// Xóa tin tức theo slug
-router.delete('/:slug', authAdmin, newsController.deleteNews);
+router.delete('/:id', authAdmin, newsController.deleteNews);
 
-// Chuyển đổi trạng thái hiển thị của tin tức theo slug
-router.put('/:slug/toggle-visibility', authAdmin, newsController.toggleNewsVisibility);
+router.put('/:id/toggle-visibility', authAdmin, newsController.toggleNewsVisibility);
 
 module.exports = router;
