@@ -26,7 +26,7 @@ const authAdmin = async (req, res, next) => {
 
 router.get('/', newsController.getAllNews);
 
-router.get('/:id', newsController.getNewsById);
+router.get('/:slug', newsController.getNewsById);
 
 router.get('/hottest', newsController.getHottestNews); 
 router.post(
@@ -41,7 +41,7 @@ router.post(
 );
 
 router.put(
-  '/:id',
+  '/:slug',
   authAdmin,
   upload.fields([
     { name: 'thumbnail', maxCount: 1 },
@@ -51,8 +51,8 @@ router.put(
   newsController.updateNews
 );
 
-router.delete('/:id', authAdmin, newsController.deleteNews);
+router.delete('/:slug', authAdmin, newsController.deleteNews);
 
-router.put('/:id/toggle-visibility', authAdmin, newsController.toggleNewsVisibility);
+router.put('/:slug/toggle-visibility', authAdmin, newsController.toggleNewsVisibility);
 
 module.exports = router;
