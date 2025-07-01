@@ -2,9 +2,6 @@ const Order = require('../models/order');
 const Product = require('../models/product'); 
 const axios = require('axios');
 
-const Order = require('../models/order');
-const Product = require('../models/product');
-
 exports.createOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
