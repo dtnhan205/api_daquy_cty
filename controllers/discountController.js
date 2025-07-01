@@ -1,4 +1,5 @@
 const Discount = require('../models/discount');
+const Order = require('../models/order');
 
 exports.createDiscount = async (req, res) => {
   try {
@@ -23,7 +24,7 @@ exports.getAllDiscounts = async (req, res) => {
 exports.getDiscountById = async (req, res) => {
   try {
     const { id } = req.params;
-    const discount = await Discount.findById(id);
+    const discount = await Discount.findById(id).populate('orderIds', 'fullName totalAmount grandTotal status createdAt');
     if (!discount) return res.status(404).json({ message: 'Không tìm thấy mã giảm giá' });
     res.status(200).json(discount);
   } catch (error) {
