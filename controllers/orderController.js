@@ -1,6 +1,7 @@
 const Order = require('../models/order');
 const Product = require('../models/product'); 
 const axios = require('axios');
+const mongoose = require('mongoose');
 
 exports.createOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -21,9 +22,7 @@ exports.createOrder = async (req, res) => {
       products,
       totalAmount,
       grandTotal,
-      status,
-      discountCode,
-      discountApplied
+      status
     } = req.body;
 
     // Kiểm tra dữ liệu đầu vào cơ bản
@@ -39,7 +38,7 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ message: 'totalAmount và grandTotal phải là số không âm' });
     }
 
-    // Kiểm tra tính hợp lệ của products (chỉ kiểm tra tồn tại và kích thước, không giảm stock)
+    // Kiểm tra tính hợp lệ của products
     for (const product of products) {
       if (!product.productId || !product.productName || !product.size_name || !product.quantity || !product.price) {
         return res.status(400).json({ message: 'Mỗi sản phẩm phải có productId, productName, size_name, quantity và price' });
@@ -55,15 +54,14 @@ exports.createOrder = async (req, res) => {
         return res.status(400).json({ message: `Kích thước ${product.size_name} không tồn tại cho sản phẩm ${product.productName}` });
       }
 
-      if (product.quantity <= 0) {
-        return res.status(400).json({ message: `Số lượng của sản phẩm ${product.productName} không hợp lệ` });
+      if (option.stock < product.quantity || product.quantity <= 0) {
+        return res.status(400).json({ message: `Kích thước ${product.size_name} của sản phẩm ${product.productName} không đủ tồn kho hoặc số lượng không hợp lệ` });
       }
     }
 
-    // Tạo đơn hàng
     const order = new Order({
       fullName,
-      dateOfBirth: dateOfBirth || null, // Không bắt buộc, gửi null nếu không có
+      dateOfBirth,
       phoneNumber,
       email,
       country,
@@ -75,19 +73,13 @@ exports.createOrder = async (req, res) => {
       products,
       totalAmount,
       grandTotal,
-      status: status || 'Chờ xử lý',
-      discountCode,
-      discountApplied: discountApplied || 0
+      status: status || 'Chờ xử lý'
     });
 
     const savedOrder = await order.save({ session });
-
     await session.commitTransaction();
 
-    res.status(201).json({
-      message: 'Đơn hàng đã được tạo thành công',
-      order: savedOrder
-    });
+    res.status(201).json(savedOrder);
   } catch (error) {
     await session.abortTransaction();
     console.error('Order create error:', error);
