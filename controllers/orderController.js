@@ -2,7 +2,13 @@ const Order = require('../models/order');
 const Product = require('../models/product'); 
 const axios = require('axios');
 
+const Order = require('../models/order');
+const Product = require('../models/product');
+
 exports.createOrder = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const {
       fullName,
@@ -21,18 +27,37 @@ exports.createOrder = async (req, res) => {
       status
     } = req.body;
 
+    // Kiểm tra dữ liệu đầu vào cơ bản
+    if (!fullName || !phoneNumber || !email || !country || !city || !district || !ward || !address) {
+      return res.status(400).json({ message: 'Các trường bắt buộc (fullName, phoneNumber, email, country, city, district, ward, address) không được để trống' });
+    }
+
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ message: 'Danh sách sản phẩm (products) phải là mảng và không được rỗng' });
+    }
+
+    if (typeof totalAmount !== 'number' || typeof grandTotal !== 'number' || totalAmount < 0 || grandTotal < 0) {
+      return res.status(400).json({ message: 'totalAmount và grandTotal phải là số không âm' });
+    }
+
     // Kiểm tra tính hợp lệ của products
     for (const product of products) {
-      const existingProduct = await Product.findById(product.productId);
+      if (!product.productId || !product.productName || !product.size_name || !product.quantity || !product.price) {
+        return res.status(400).json({ message: 'Mỗi sản phẩm phải có productId, productName, size_name, quantity và price' });
+      }
+
+      const existingProduct = await Product.findById(product.productId).session(session);
       if (!existingProduct) {
         return res.status(400).json({ message: `Sản phẩm với ID ${product.productId} không tồn tại` });
       }
+
       const option = existingProduct.option.find(opt => opt.size_name === product.size_name);
       if (!option) {
         return res.status(400).json({ message: `Kích thước ${product.size_name} không tồn tại cho sản phẩm ${product.productName}` });
       }
-      if (option.stock < product.quantity) {
-        return res.status(400).json({ message: `Kích thước ${product.size_name} của sản phẩm ${product.productName} không đủ tồn kho` });
+
+      if (option.stock < product.quantity || product.quantity <= 0) {
+        return res.status(400).json({ message: `Kích thước ${product.size_name} của sản phẩm ${product.productName} không đủ tồn kho hoặc số lượng không hợp lệ` });
       }
     }
 
@@ -50,15 +75,23 @@ exports.createOrder = async (req, res) => {
       products,
       totalAmount,
       grandTotal,
-      status: status || 'Chờ xử lý',
-      createdAt: new Date()
+      status: status || 'Chờ xử lý'
     });
 
-    const savedOrder = await order.save();
+    const savedOrder = await order.save({ session });
+    await session.commitTransaction();
+
     res.status(201).json(savedOrder);
   } catch (error) {
+    await session.abortTransaction();
     console.error('Order create error:', error);
-    res.status(400).json({ message: 'Có lỗi xảy ra khi tạo đơn hàng', error: error.message, detail: error.errors });
+    res.status(400).json({
+      message: 'Có lỗi xảy ra khi tạo đơn hàng',
+      error: error.message,
+      details: error.errors ? error.errors : 'Không có chi tiết lỗi'
+    });
+  } finally {
+    session.endSession();
   }
 };
 
