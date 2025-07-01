@@ -54,9 +54,12 @@ exports.getAllProducts = async (req, res) => {
 // Lấy tất cả sản phẩm có trạng thái show
 exports.getAllShowProducts = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 50; // Mặc định là 50, có thể điều chỉnh
     if (limit < 0) {
       return res.status(400).json({ error: 'Giá trị limit phải là số nguyên không âm' });
+    }
+    if (limit > 100) { // Giới hạn tối đa là 100 để tránh tải quá nhiều
+      return res.status(400).json({ error: 'Giá trị limit không được vượt quá 100' });
     }
     const productList = await Product.find({ status: 'show' }).sort({ createdAt: -1 }).limit(limit);
     if (!productList.length) {
