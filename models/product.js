@@ -6,24 +6,25 @@ const productSchema = new mongoose.Schema({
     name_categories: { type: String, required: true },
   },
   level: { type: String, default: '' },
-  stock: { type: Number, default: 0 },
   element: { type: String, default: '' },
   name: { type: String, required: true },
   slug: { type: String, required: true, unique: true },
   images: [{ type: String }],
-  price: { type: Number, default: 0 },
   status: { type: String, enum: ['hidden', 'show', 'sale'], default: 'show', required: true },
   tag: { type: String, default: 'new' },
   short_description: { type: String, default: '' },
-  weight: { type: String, default: '' },
-  size: [{
-    size_name: { type: String },
-    stock: { type: Number, default: 0 },
+  option: [{
+    _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
+    size_name: { type: String, required: true },
+    stock: { type: Number, required: true, default: 0 },
+    price: { type: Number, required: true }
   }],
   description: { type: String, default: '' },
   purchases: { type: Number, default: 0 },
   views: { type: Number, default: 0 },
-  createdAt: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now }
 });
 
 module.exports = mongoose.model('Product', productSchema);
+
+

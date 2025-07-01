@@ -50,6 +50,7 @@ exports.getAllProducts = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server khi lấy sản phẩm', error: error.message });
   }
 };
+
 // Lấy tất cả sản phẩm có trạng thái show
 exports.getAllShowProducts = async (req, res) => {
   try {
@@ -95,6 +96,7 @@ exports.findBySlug = async (req, res) => {
     res.status(500).json({ message: 'Lỗi server khi lấy sản phẩm', error: error.message });
   }
 };
+
 // Lấy sản phẩm theo slug chỉ khi có trạng thái show
 exports.getShowProductBySlug = async (req, res) => {
   try {
@@ -164,17 +166,15 @@ exports.createProduct = async (req, res) => {
     const {
       category,
       level,
-      stock,
       element,
       name,
       price,
       status,
       tag,
       short_description,
-      weight,
-      size,
       description,
       purchases,
+      option
     } = req.body;
 
     if (!name) {
@@ -200,22 +200,21 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ error: `Lỗi phân tích category: ${e.message}` });
     }
 
-    let parsedSize = [];
-    if (size) {
+    let parsedOption = [];
+    if (option) {
       try {
-        parsedSize = typeof size === 'string' ? JSON.parse(size) : size;
-        if (!Array.isArray(parsedSize) || !parsedSize.every(item => item.stock >= 0 && item.size_name)) {
-          return res.status(400).json({ error: 'Size phải là mảng các object với stock và size_name' });
+        parsedOption = typeof option === 'string' ? JSON.parse(option) : option;
+        if (!Array.isArray(parsedOption) || !parsedOption.every(item => item.stock >= 0 && item.size_name && item.price >= 0)) {
+          return res.status(400).json({ error: 'Option phải là mảng các object với stock, size_name và price' });
         }
       } catch (e) {
-        return res.status(400).json({ error: `Lỗi phân tích size: ${e.message}` });
+        return res.status(400).json({ error: `Lỗi phân tích option: ${e.message}` });
       }
     }
 
     const newProduct = new Product({
       category: parsedCategory,
       level: level || '',
-      stock: parseInt(stock, 10) || 0,
       element: element || '',
       name,
       slug,
@@ -224,8 +223,7 @@ exports.createProduct = async (req, res) => {
       status: status || 'show',
       tag: tag || 'new',
       short_description: short_description || '',
-      weight: weight || '',
-      size: parsedSize,
+      option: parsedOption,
       description: description || '',
       purchases: parseInt(purchases, 10) || 0,
       views: 0,
@@ -252,17 +250,15 @@ exports.updateProduct = async (req, res) => {
     const {
       category,
       level,
-      stock,
       element,
       name,
       price,
       status,
       tag,
       short_description,
-      weight,
-      size,
       description,
       purchases,
+      option
     } = req.body;
 
     const product = await Product.findOne({ slug });
@@ -294,15 +290,15 @@ exports.updateProduct = async (req, res) => {
       }
     }
 
-    let parsedSize = product.size;
-    if (size) {
+    let parsedOption = product.option;
+    if (option) {
       try {
-        parsedSize = typeof size === 'string' ? JSON.parse(size) : size;
-        if (!Array.isArray(parsedSize) || !parsedSize.every(item => item.stock >= 0 && item.size_name)) {
-          return res.status(400).json({ error: 'Size phải là mảng các object với stock và size_name' });
+        parsedOption = typeof option === 'string' ? JSON.parse(option) : option;
+        if (!Array.isArray(parsedOption) || !parsedOption.every(item => item.stock >= 0 && item.size_name && item.price >= 0)) {
+          return res.status(400).json({ error: 'Option phải là mảng các object với stock, size_name và price' });
         }
       } catch (e) {
-        return res.status(400).json({ error: `Lỗi phân tích size: ${e.message}` });
+        return res.status(400).json({ error: `Lỗi phân tích option: ${e.message}` });
       }
     }
 
@@ -311,7 +307,6 @@ exports.updateProduct = async (req, res) => {
       {
         category: parsedCategory,
         level: level || product.level,
-        stock: parseInt(stock, 10) || product.stock,
         element: element || product.element,
         name: name || product.name,
         slug: newSlug,
@@ -320,8 +315,7 @@ exports.updateProduct = async (req, res) => {
         status: status || product.status,
         tag: tag || product.tag,
         short_description: short_description || product.short_description,
-        weight: weight || product.weight,
-        size: parsedSize,
+        option: parsedOption,
         description: description || product.description,
         purchases: parseInt(purchases, 10) || product.purchases,
       },

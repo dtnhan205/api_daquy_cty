@@ -14,12 +14,13 @@ const orderSchema = new mongoose.Schema({
   products: [{
     productId: { type: String, required: true },
     productName: { type: String, required: true },
+    size_name: { type: String, required: true }, 
     quantity: { type: Number, required: true },
     price: { type: Number, required: true }
   }],
   totalAmount: { type: Number, required: true },
   grandTotal: { type: Number, required: true },
-  status: { type: String, enum: ['Chờ xử lý', 'Đang giao', 'Đã giao'], default: 'Chờ xử lý' },
+  status: { type: String, enum: ['Chờ xử lý', 'Đang giao', 'Đã giao', 'Đã hủy', 'Đang hoàn', 'Đã hoàn'], default: 'Chờ xử lý' },
   isDeleted: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });

@@ -1,4 +1,5 @@
 const Order = require('../models/order');
+const Product = require('../models/product'); 
 const axios = require('axios');
 
 exports.createOrder = async (req, res) => {
@@ -19,6 +20,21 @@ exports.createOrder = async (req, res) => {
       grandTotal,
       status
     } = req.body;
+
+    // Kiểm tra tính hợp lệ của products
+    for (const product of products) {
+      const existingProduct = await Product.findById(product.productId);
+      if (!existingProduct) {
+        return res.status(400).json({ message: `Sản phẩm với ID ${product.productId} không tồn tại` });
+      }
+      const option = existingProduct.option.find(opt => opt.size_name === product.size_name);
+      if (!option) {
+        return res.status(400).json({ message: `Kích thước ${product.size_name} không tồn tại cho sản phẩm ${product.productName}` });
+      }
+      if (option.stock < product.quantity) {
+        return res.status(400).json({ message: `Kích thước ${product.size_name} của sản phẩm ${product.productName} không đủ tồn kho` });
+      }
+    }
 
     const order = new Order({
       fullName,
@@ -41,7 +57,7 @@ exports.createOrder = async (req, res) => {
     const savedOrder = await order.save();
     res.status(201).json(savedOrder);
   } catch (error) {
-    console.error('Order create error:', error); // Thêm dòng này để log lỗi chi tiết
+    console.error('Order create error:', error);
     res.status(400).json({ message: 'Có lỗi xảy ra khi tạo đơn hàng', error: error.message, detail: error.errors });
   }
 };
@@ -122,18 +138,73 @@ exports.toggleOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    const validStatuses = ['Chờ xử lý', 'Đang giao', 'Đã giao'];
+    const validStatuses = ['Chờ xử lý', 'Đang giao', 'Đã giao', 'Đã hủy', 'Đang hoàn', 'Đã hoàn'];
 
     if (!status || !validStatuses.includes(status)) {
       return res.status(400).json({ message: 'Trạng thái không hợp lệ' });
     }
 
-    const order = await Order.findById(id);
-    if (!order) return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
+    const order = await Order.findById(id).where('isDeleted').equals(false);
+    if (!order) {
+      return res.status(404).json({ message: 'Không tìm thấy đơn hàng' });
+    }
 
-    const updatedOrder = await Order.findByIdAndUpdate(id, { status }, { new: true, runValidators: true });
-    res.status(200).json(updatedOrder);
+    const currentStatus = order.status;
+
+    const updatedOrder = await Order.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true, runValidators: true }
+    );
+
+    for (const product of order.products) {
+      const productDoc = await Product.findById(product.productId);
+      if (!productDoc) {
+        return res.status(400).json({ message: `Sản phẩm với ID ${product.productId} không tồn tại` });
+      }
+
+      const option = productDoc.option.find(opt => opt.size_name === product.size_name);
+      if (!option) {
+        return res.status(400).json({ message: `Kích thước ${product.size_name} không tồn tại cho sản phẩm ${product.productName}` });
+      }
+
+      // Giảm stock khi chuyển sang "Đang giao" từ trạng thái không phải "Đang giao" hoặc "Đã giao"
+      if (status === 'Đang giao' && currentStatus !== 'Đang giao' && currentStatus !== 'Đã giao') {
+        if (option.stock < product.quantity) {
+          return res.status(400).json({ 
+            message: `Kích thước ${product.size_name} của sản phẩm ${product.productName} không đủ tồn kho` 
+          });
+        }
+        option.stock -= product.quantity;
+      }
+      // Không giảm stock khi chuyển từ "Đang giao" sang "Đã giao"
+      else if (status === 'Đã giao' && currentStatus === 'Đang giao') {
+        // Không làm gì, giữ nguyên stock
+      }
+      // Giảm stock khi chuyển sang "Đã giao" từ trạng thái khác (không phải "Đang giao")
+      else if (status === 'Đã giao' && currentStatus !== 'Đang giao' && currentStatus !== 'Đã giao') {
+        if (option.stock < product.quantity) {
+          return res.status(400).json({ 
+            message: `Kích thước ${product.size_name} của sản phẩm ${product.productName} không đủ tồn kho` 
+          });
+        }
+        option.stock -= product.quantity;
+      }
+      // Tăng stock khi chuyển sang "Đã hủy" hoặc "Đã hoàn" từ trạng thái không phải "Đã hủy" hoặc "Đã hoàn"
+      else if ((status === 'Đã hủy' || status === 'Đã hoàn') && 
+               currentStatus !== 'Đã hủy' && currentStatus !== 'Đã hoàn') {
+        option.stock += product.quantity;
+      }
+
+      await productDoc.save();
+    }
+
+    res.status(200).json({
+      message: `Trạng thái đơn hàng đã được cập nhật thành ${status}`,
+      order: updatedOrder
+    });
   } catch (error) {
-    res.status(400).json({ message: 'Có lỗi xảy ra khi thay đổi trạng thái đơn hàng' });
+    console.error('Lỗi khi cập nhật trạng thái đơn hàng:', error);
+    res.status(400).json({ message: 'Có lỗi xảy ra khi thay đổi trạng thái đơn hàng', error: error.message });
   }
 };
