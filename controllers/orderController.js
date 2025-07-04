@@ -1,5 +1,6 @@
 const Order = require('../models/order');
 const Product = require('../models/product'); 
+const Discount = require('../models/discount');
 const axios = require('axios');
 const mongoose = require('mongoose');
 
@@ -9,84 +10,96 @@ exports.createOrder = async (req, res) => {
 
   try {
     const {
-      fullName,
-      dateOfBirth,
-      phoneNumber,
-      email,
-      country,
-      city,
-      district,
-      ward,
-      address,
-      orderNote,
-      products,
-      totalAmount,
-      grandTotal,
-      status
+      fullName, dateOfBirth, phoneNumber, email, country, city, district, ward, address,
+      orderNote, products, totalAmount, grandTotal, status, discountCode
     } = req.body;
 
-    // Kiểm tra dữ liệu đầu vào cơ bản
     if (!fullName || !phoneNumber || !email || !country || !city || !district || !ward || !address) {
-      return res.status(400).json({ message: 'Các trường bắt buộc (fullName, phoneNumber, email, country, city, district, ward, address) không được để trống' });
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Các trường bắt buộc (tên, số điện thoại, email, địa chỉ) không được để trống' });
     }
 
     if (!Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({ message: 'Danh sách sản phẩm (products) phải là mảng và không được rỗng' });
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Danh sách sản phẩm phải là mảng và không được rỗng' });
     }
 
     if (typeof totalAmount !== 'number' || typeof grandTotal !== 'number' || totalAmount < 0 || grandTotal < 0) {
+      await session.abortTransaction();
       return res.status(400).json({ message: 'totalAmount và grandTotal phải là số không âm' });
     }
 
-    // Kiểm tra tính hợp lệ của products
     for (const product of products) {
       if (!product.productId || !product.productName || !product.size_name || !product.quantity || !product.price) {
-        return res.status(400).json({ message: 'Mỗi sản phẩm phải có productId, productName, size_name, quantity và price' });
+        await session.abortTransaction();
+        return res.status(400).json({ message: 'Mỗi sản phẩm phải có đầy đủ thông tin' });
       }
 
       const existingProduct = await Product.findById(product.productId).session(session);
       if (!existingProduct) {
+        await session.abortTransaction();
         return res.status(400).json({ message: `Sản phẩm với ID ${product.productId} không tồn tại` });
       }
 
       const option = existingProduct.option.find(opt => opt.size_name === product.size_name);
-      if (!option) {
-        return res.status(400).json({ message: `Kích thước ${product.size_name} không tồn tại cho sản phẩm ${product.productName}` });
-      }
-
-      if (option.stock < product.quantity || product.quantity <= 0) {
-        return res.status(400).json({ message: `Kích thước ${product.size_name} của sản phẩm ${product.productName} không đủ tồn kho hoặc số lượng không hợp lệ` });
+      if (!option || option.stock < product.quantity || product.quantity <= 0) {
+        await session.abortTransaction();
+        return res.status(400).json({ message: `Kích thước ${product.size_name} không hợp lệ hoặc không đủ tồn kho` });
       }
     }
 
+    // Kiểm tra và áp dụng mã giảm giá
+    let finalGrandTotal = grandTotal;
+    let appliedDiscount = null;
+    if (discountCode) {
+      const discount = await Discount.findOne({ code: discountCode, isActive: true }).session(session);
+      if (!discount) {
+        await session.abortTransaction();
+        return res.status(400).json({ message: 'Mã giảm giá không tồn tại hoặc không hoạt động' });
+      }
+
+      if (new Date() > discount.expirationDate) {
+        await session.abortTransaction();
+        return res.status(400).json({ message: 'Mã giảm giá đã hết hạn' });
+      }
+
+      if (discount.usedCount >= discount.usageLimit) {
+        await session.abortTransaction();
+        return res.status(400).json({ message: 'Mã giảm giá đã hết lượt sử dụng' });
+      }
+
+      const expectedGrandTotal = Math.round(totalAmount * (1 - discount.discountPercentage / 100));
+      if (Math.abs(expectedGrandTotal - grandTotal) > 0.01) {
+        await session.abortTransaction();
+        return res.status(400).json({ message: 'grandTotal không khớp với mã giảm giá' });
+      }
+
+      finalGrandTotal = expectedGrandTotal;
+      appliedDiscount = discount;
+    }
+
     const order = new Order({
-      fullName,
-      dateOfBirth,
-      phoneNumber,
-      email,
-      country,
-      city,
-      district,
-      ward,
-      address,
-      orderNote,
-      products,
-      totalAmount,
-      grandTotal,
-      status: status || 'Chờ xử lý'
+      fullName, dateOfBirth, phoneNumber, email, country, city, district, ward, address,
+      orderNote, products, totalAmount, grandTotal: finalGrandTotal, discountCode, status: status || 'Chờ xử lý'
     });
 
     const savedOrder = await order.save({ session });
-    await session.commitTransaction();
 
-    res.status(201).json(savedOrder);
+    // Cập nhật discount
+    if (appliedDiscount) {
+      appliedDiscount.usedCount += 1;
+      appliedDiscount.orderIds.push(savedOrder._id);
+      await appliedDiscount.save({ session });
+    }
+
+    await session.commitTransaction();
+    res.status(201).json({ order: savedOrder });
   } catch (error) {
     await session.abortTransaction();
     console.error('Order create error:', error);
     res.status(400).json({
       message: 'Có lỗi xảy ra khi tạo đơn hàng',
-      error: error.message,
-      details: error.errors ? error.errors : 'Không có chi tiết lỗi'
+      error: error.message
     });
   } finally {
     session.endSession();
@@ -210,7 +223,6 @@ exports.toggleOrderStatus = async (req, res) => {
       }
       // Không giảm stock khi chuyển từ "Đang giao" sang "Đã giao"
       else if (status === 'Đã giao' && currentStatus === 'Đang giao') {
-        // Không làm gì, giữ nguyên stock
       }
       // Giảm stock khi chuyển sang "Đã giao" từ trạng thái khác (không phải "Đang giao")
       else if (status === 'Đã giao' && currentStatus !== 'Đang giao' && currentStatus !== 'Đã giao') {

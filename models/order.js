@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
-  dateOfBirth: { type: Date},
+  dateOfBirth: { type: Date }, 
   phoneNumber: { type: String, required: true },
   email: { type: String, required: true },
   country: { type: String, required: true },
@@ -20,6 +20,7 @@ const orderSchema = new mongoose.Schema({
   }],
   totalAmount: { type: Number, required: true },
   grandTotal: { type: Number, required: true },
+  discountCode: { type: String },
   status: { type: String, enum: ['Chờ xử lý', 'Đang giao', 'Đã giao', 'Đã hủy', 'Đang hoàn', 'Đã hoàn'], default: 'Chờ xử lý' },
   isDeleted: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
