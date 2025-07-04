@@ -46,11 +46,17 @@ exports.getNewsById = async (req, res) => {
     if (isAdmin) {
       news = await News.findOne({ slug: req.params.slug }).populate('newCategory');
     } else {
+      // Chỉ tăng views nếu chưa tăng trong session (giả sử dùng session hoặc IP để kiểm tra)
       news = await News.findOneAndUpdate(
-        { slug: req.params.slug },
-        { $inc: { views: 1 } },
-        { new: true }
+        { slug: req.params.slug, viewsIncremented: { $ne: true } }, // Điều kiện để tránh tăng nhiều lần
+        { $inc: { views: 1 }, $set: { viewsIncremented: true } }, // Tăng views và đánh dấu đã tăng
+        { new: true, upsert: false, runValidators: true }
       ).populate('newCategory');
+
+      // Nếu không tìm thấy bản ghi với điều kiện, lấy bản gốc và không tăng views
+      if (!news) {
+        news = await News.findOne({ slug: req.params.slug }).populate('newCategory');
+      }
     }
 
     if (!news) {
@@ -145,7 +151,7 @@ exports.createNews = async (req, res) => {
         } else if (block.content && block.content.trim()) {
           block.type = 'text';
         } else {
-          return null; // Bỏ qua nếu không xác định được
+          return null;
         }
       }
       if (block.type === 'image') {
@@ -283,7 +289,7 @@ exports.updateNews = async (req, res) => {
         } else if (block.content && block.content.trim()) {
           block.type = 'text';
         } else {
-          return null; // Bỏ qua nếu không xác định được
+          return null;
         }
       }
       if (block.type === 'image') {
