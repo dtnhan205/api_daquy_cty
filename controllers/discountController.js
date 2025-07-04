@@ -37,7 +37,7 @@ exports.getDiscountById = async (req, res) => {
 exports.getDiscountsWithOrders = async (req, res) => {
   try {
     const discounts = await Discount.find()
-      .populate('orderIds', 'fullName email phoneNumber totalAmount grandTotal discountCode status createdAt');
+      .populate('orderIds', 'fullName email phoneNumber totalAmount grandTotal discountCode status createdAt products');
     res.status(200).json(discounts);
   } catch (error) {
     res.status(400).json({ message: 'Có lỗi xảy ra khi lấy danh sách mã giảm giá', error: error.message });
