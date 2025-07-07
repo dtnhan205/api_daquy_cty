@@ -198,7 +198,7 @@ exports.updateNews = async (req, res) => {
     }
 
     // Kiểm tra danh mục nếu được cung cấp
-    let categoryId = categoryNew?.oid;
+    let categoryId = categoryNew; // Sử dụng trực tiếp categoryNew làm _id
     if (categoryId) {
       if (!mongoose.Types.ObjectId.isValid(categoryId)) {
         return res.status(400).json({ error: 'ID danh mục không hợp lệ' });
@@ -285,7 +285,7 @@ exports.updateNews = async (req, res) => {
       views: parseInt(views) >= 0 ? parseInt(views) : existingNews.views,
       status: status || existingNews.status,
       contentBlocks: finalContentBlocks.length > 0 ? finalContentBlocks : existingNews.contentBlocks,
-      newCategory: categoryId || existingNews.newCategory,
+      newCategory: categoryId || existingNews.newCategory, // Sử dụng categoryId trực tiếp
     };
 
     // Xử lý thumbnail nếu có
@@ -296,7 +296,7 @@ exports.updateNews = async (req, res) => {
 
     // Kiểm tra và cập nhật slug nếu tiêu đề thay đổi
     if (title && title !== existingNews.title) {
-      const newSlug = generateSlug(title);
+      const newSlug = generateSlug(title); // Giả sử generateSlug là hàm tạo slug
       const slugCheck = await News.findOne({ slug: newSlug, _id: { $ne: existingNews._id } });
       if (slugCheck) {
         return res.status(400).json({ error: 'Tiêu đề này đã tồn tại, vui lòng chọn tiêu đề khác' });
